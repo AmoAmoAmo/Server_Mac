@@ -38,8 +38,10 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
     return self;
 }
 
--(void)startTCPTransmissionService
+-(void)startTCPTransmissionServiceAndReturnReadySignal:(ReturnReadySignalBlock)block
 {
+    self.readyBlock = block;
+    
     int ret = [self initSocket];
     if (ret == 0) {
         
@@ -47,9 +49,8 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
         if ([self recvTransRequest]) {
             printf("------- 开始准备传输音视频数据 ---------\n");
             canSendData = true;
-            
-            
-            
+            // block
+            self.readyBlock(true);
         }
     }
 }
@@ -122,7 +123,7 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
         close(m_connectfd);
     }
     printf("---------- TCP已断开 -----------\n");
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"tcpStopped" object:nil];
+//    [[NSNotificationCenter defaultCenter] postNotificationName:@"tcpStopped" object:nil];
 }
 
 

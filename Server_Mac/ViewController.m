@@ -14,7 +14,7 @@
 #import "TCPDataDefine.h"
 #import "AACEncoder.h"
 #import "HJTCPServer.h"
-
+#import "HJUDPServer.h"
 
 typedef enum : NSUInteger {
     NOTCONNECT,
@@ -55,7 +55,9 @@ typedef enum : NSUInteger {
 
 @property (weak) IBOutlet NSView *captureView;
 
+@property (nonatomic, retain) HJUDPServer   *server;
 
+@property (nonatomic, assign) BOOL isReadyToVideoEncode;
 
 @property (nonatomic, retain) HJTCPServer   *tcpServer;
 
@@ -81,16 +83,16 @@ typedef enum : NSUInteger {
     
     // 测试代码
     self.devStatueEnum = CONNECTED;
+    
+    self.isReadyToVideoEncode = false;
+
+    
     // 在子线程里面操作TCP
     [NSThread detachNewThreadSelector:@selector(startTCPServiceThread) toTarget:self withObject:nil];
     
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tcpStopped) name:@"tcpStopped" object:nil];
 }
 
--(void)dealloc
-{
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
+
 
 -(void)startCapture
 {
@@ -102,16 +104,8 @@ typedef enum : NSUInteger {
     self.previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:self.avSession];
 //    NSLog(@"---- capture width = %f, height = %f ", self.captureView.frame.size.width, self.captureView.frame.size.height);
     self.previewLayer.frame = self.captureView.bounds;
-    // 保留纵横比
+    // 填充
     [self.previewLayer setVideoGravity:AVLayerVideoGravityResizeAspectFill];
-    /*
-     AVVideoScalingModeResizeAspectFill ; 
-     AVLayerVideoGravityResizeAspect
-     AVVideoYCbCrMatrix_ITU_R_601_4
-     AVVideoColorPrimaries_SMPTE_C
-     
-     AVVideoColorPropertiesKey
-     */
     
     
 //    [[self.previewLayer connection] setVideoMirrored:YES];
@@ -316,8 +310,6 @@ void didCompressH264(void *outputCallbackRefCon,
 }
 - (void)gotEncodedData:(NSData*)data isKeyFrame:(BOOL)isKeyFrame
 {
-//    NSLog(@"--------- 编码后数据长度： %d", (int)[data length]);
-//    NSLog(@"----------- data = %@ ------------", data);
     if (fileHandle != NULL)
     {
         // 把每一帧的所有NALU数据前四个字节变成0x00 00 00 01之后再写入文件
@@ -336,30 +328,14 @@ void didCompressH264(void *outputCallbackRefCon,
 {
     dispatch_sync(mWriteDataQueue, ^{
         
-        //    NSLog(@"----------- %@ %@ ------------",headData,data);
-//        [fileHandle writeData:headData];
-//        [fileHandle writeData:data];
-//        NSLog(@"---- data = %@ ---", data);
-        // NSData --> Byte, 输出验证data是否完整写入file。  完整。
-//        Byte *dataByte = (Byte*)[data bytes];
-//        int len = (int)[data length];
-//        printf("================\n");
-//        printf("----- len = %d \n", len);
-//        for (int i=0; i<len; i++){
-//            printf("%02x", (unsigned char)dataByte[i]);
-//        }
-//        printf("\n");
-        
-        
         tempData = [NSMutableData dataWithData:headData];
         [tempData appendData:data];
-        //    NSLog(@"--------------- len = %d ------------", (int)[tempData length]);
-//        [self dataTest];
         
         
         // 编码后的数据 data,传给TCP 开始发送给client
         printf("=== 编码后 dataLen = %d\n", (int)[tempData length]);
         [self.tcpServer sendDataToClientWithData:tempData];
+        
     });
     
 
@@ -405,6 +381,43 @@ void didCompressH264(void *outputCallbackRefCon,
 - (IBAction)startUDPSearch:(NSButton *)sender {
     
     // UDP搜索
+    if (self.server) {
+        [self stopUDP];
+    }
+    [self startUDP];
+    
+    // reset时，TCP应该被停止
+    if (self.tcpServer) {
+        [self stopTCP];
+        self.tcpServer = nil;
+    }
+    
+    
+    
+}
+
+// 阻塞等待接收UDP广播包
+-(void)startUDP
+{
+    self.devStatueEnum = NOTCONNECT;
+    
+    self.server = [[HJUDPServer alloc] init];
+    [self.server startUDPSearchServiceWithBlock:^(BOOL isRecv) {
+        
+        printf("---- 已接收 -----\n");
+        
+        self.devStatueEnum = CONNECTED;
+        
+        // 连接成功后开始捕获视频
+        [self startCapture];
+    }];
+    
+    // 连接成功就断开UDP
+    [self stopUDP];
+}
+-(void)stopUDP
+{
+    [self.server stopUDPService];
 }
 
 - (IBAction)stopCapture:(id)sender {
@@ -423,12 +436,12 @@ void didCompressH264(void *outputCallbackRefCon,
     NSLog(@"---- status = %ld ", self.devStatueEnum);
     if (self.devStatueEnum == CONNECTED) {
         self.tcpServer = [[HJTCPServer alloc] init];
-        [self.tcpServer startTCPTransmissionService];
-        
-        //        // $$$$ 测试代码 ￥￥￥￥NSString *str = @"hello world";
-        //        NSString *str = @"hello world";
-        //        NSData *data = [str dataUsingEncoding:NSUTF8StringEncoding];
-        //        [self.tcpServer sendDataToClientWithData:data];
+        [self.tcpServer startTCPTransmissionServiceAndReturnReadySignal:^(BOOL isReady) {
+            if (isReady) {
+                // 可以开始编码的信号
+                self.isReadyToVideoEncode = true;
+            }
+        }];
     }
 }
 -(void)stopTCP
@@ -455,24 +468,6 @@ void didCompressH264(void *outputCallbackRefCon,
     // 获取输入设备数据，有可能是音频有可能是视频
     if (captureOutput == self.videoOutput) {
         //捕获到视频数据
-        /*
-         mediaType:'vide'
-         mediaSubType:'420v'     // videoOutput设置成什么类型就是什么类型
-         */
-//        NSLog(@"视频 ---");
-//        NSLog(@"---- sampleBuffer = %@--", sampleBuffer);
-//        NSLog(@"==========================================================");
-//        // 简单打印摄像头输出数据的信息  (CVImageBufferRef 和 CVPixelBufferRef 可以看作是一样的)
-//        CVPixelBufferRef pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-//        OSType videoType =  CVPixelBufferGetPixelFormatType(pixelBuffer);
-//        NSLog(@"***** videoType = %d *******",videoType);
-//        if (CVPixelBufferIsPlanar(pixelBuffer)) {
-//            NSLog(@"kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange -> planar buffer");
-//        }
-//        CMVideoFormatDescriptionRef desc = NULL;
-//        CMVideoFormatDescriptionCreateForImageBuffer(NULL, pixelBuffer, &desc);
-//        CFDictionaryRef extensions = CMFormatDescriptionGetExtensions(desc);
-//        NSLog(@"extensions = %@", extensions);
         
         
 //         YUV422转YUV420
@@ -485,9 +480,16 @@ void didCompressH264(void *outputCallbackRefCon,
 //        NSLog(@"++++++++ extensions2 = %@ ++++++++++", extensions2);
         
         
-        dispatch_sync(mEncodeQueue, ^{
-            [self encode:pixelBuf_After];
-        });
+        
+        
+        
+        // 当TCP需要开始传输数据时，开始编码
+        if (self.isReadyToVideoEncode) {
+            
+            dispatch_sync(mEncodeQueue, ^{
+                [self encode:pixelBuf_After];
+            });
+        }
         
         
     }
@@ -613,47 +615,6 @@ void didCompressH264(void *outputCallbackRefCon,
     CFRelease(blockBuffer);
 }
 
-
-// yuv422转yuv420
-int yuv422toyuv420(unsigned char *out, const unsigned char *in, unsigned int width, unsigned int height)
-{
-    unsigned char *y = out;
-    unsigned char *u = out + width*height;
-    unsigned char *v = out + width*height + width*height/4;
-    
-    unsigned int i,j;
-    unsigned int base_h;
-    unsigned int is_y = 1, is_u = 1;
-    unsigned int y_index = 0, u_index = 0, v_index = 0;
-    
-    unsigned long yuv422_length = 2 * width * height;
-    
-    //序列为YU YV YU YV，一个yuv422帧的长度 width * height * 2 个字节
-    //丢弃偶数行 u v
-    
-    for(i=0; i<yuv422_length; i+=2){
-        *(y+y_index) = *(in+i);
-        y_index++;
-    }
-    
-    for(i=0; i<height; i+=2){
-        base_h = i*width*2;
-        for(j=base_h+1; j<base_h+width*2; j+=2){
-            if(is_u){
-                *(u+u_index) = *(in+j);
-                u_index++;
-                is_u = 0;
-            }
-            else{
-                *(v+v_index) = *(in+j);
-                v_index++;
-                is_u = 1;
-            }
-        }
-    }
-    
-    return 1;
-}
 
 
 
