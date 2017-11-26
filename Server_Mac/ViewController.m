@@ -333,7 +333,7 @@ void didCompressH264(void *outputCallbackRefCon,
         
         
         // 编码后的数据 data,传给TCP 开始发送给client
-        printf("=== 编码后 dataLen = %d\n", (int)[tempData length]);
+//        printf("=== 编码后 dataLen = %d\n", (int)[tempData length]);
         [self.tcpServer sendDataToClientWithData:tempData];
         
     });
@@ -371,28 +371,30 @@ void didCompressH264(void *outputCallbackRefCon,
 }
 
 
-
+// 点击 startCapture 时
 - (IBAction)clickButton:(NSButton *)sender {
     printf("----- startCapture ----- \n");
     
     [self startCapture];
 }
 
+// 点击 reset 时
 - (IBAction)startUDPSearch:(NSButton *)sender {
+    
+//    [self stopCapture];
+    
+    // reset时，TCP应该被停止
+    if (self.tcpServer) {
+        [self stopTCP];
+//        self.tcpServer = nil;
+    }
+    
     
     // UDP搜索
     if (self.server) {
         [self stopUDP];
     }
     [self startUDP];
-    
-    // reset时，TCP应该被停止
-    if (self.tcpServer) {
-        [self stopTCP];
-        self.tcpServer = nil;
-    }
-    
-    
     
 }
 
@@ -404,7 +406,7 @@ void didCompressH264(void *outputCallbackRefCon,
     self.server = [[HJUDPServer alloc] init];
     [self.server startUDPSearchServiceWithBlock:^(BOOL isRecv) {
         
-        printf("---- 已接收 -----\n");
+        printf("---- UDP 已接收 -----\n\n");
         
         self.devStatueEnum = CONNECTED;
         
@@ -422,10 +424,10 @@ void didCompressH264(void *outputCallbackRefCon,
 
 - (IBAction)stopCapture:(id)sender {
     [self stopCapture];
-    // reset时，TCP应该被停止
+    // stopCapture时，TCP停止
     if (self.tcpServer) {
         [self stopTCP];
-        self.tcpServer = nil;
+//        self.tcpServer = nil;
     }
 }
 
@@ -510,7 +512,7 @@ void didCompressH264(void *outputCallbackRefCon,
 
 // ========== 处理YUV422数据 ==========
 /*
-    1. CMSampleBufferRef 中提取yuv数据
+    1. CMSampleBufferRef 中提取yuv数据(Byte)
     2. 处理yuv数据
     3. yuv数据 转CVPixelBufferRef ，继续进行编码
  */

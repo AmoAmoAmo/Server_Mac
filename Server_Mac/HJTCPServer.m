@@ -17,6 +17,8 @@ pthread_mutex_t  mutex_dRecv=PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
 
 
+
+
 @interface HJTCPServer()
 {
     int     m_connectfd;
@@ -47,7 +49,7 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
         
         // 阻塞，直到客户端来连接
         if ([self recvTransRequest]) {
-            printf("------- 开始准备传输音视频数据 ---------\n");
+            printf("------- 连接成功，开始准备传输音视频数据 ---------\n");
             canSendData = true;
             // block
             self.readyBlock(true);
@@ -106,7 +108,7 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
         perror("tcp listen error:");
         return -1;
     }
-    printf("------- tcp accept成功 -------, fd = %d\n", m_connectfd);
+    printf("------- TCP accept成功 -------, fd = %d\n", m_connectfd);
     // 连接成功后会返回，通过my_clientaddr变量就可知道是哪个来连接服务器, 进而建立通信。通过connectfd来和客户端进行读写操作
 //    printf("======= tcp accept--------- Address:%s\n",inet_ntoa(m_clientaddr.sin_addr));
     
@@ -179,7 +181,7 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
     HJ_VideoAndAudioDataRequest request;
     memset(&request, 0, sizeof(request));
     
-    printf("---- sizeof request = %ld\n",sizeof(request));
+    printf("---- TCP 收到请求，sizeof request = %ld\n",sizeof(request));
     
 //    // 打印结构体
 //    char *tempBuf = (char *)malloc(sizeof(request));
@@ -261,7 +263,7 @@ pthread_mutex_t  mutex_dSend=PTHREAD_MUTEX_INITIALIZER;
 {
     //
     signal(SIGPIPE, SIG_IGN);  // 防止程序收到SIGPIPE后自动退出
-
+    
     pthread_mutex_lock(&mutex_dRecv);
     
     int recvLen=0;

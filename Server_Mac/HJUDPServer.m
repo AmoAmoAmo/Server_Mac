@@ -145,7 +145,7 @@
         
         if (msgHead.controlMask==CONTROLLCODE_SEARCH_BROADCAST_REQUEST) {
             
-            NSLog(@"RECV:::::IPADDR: %s Port: %d",inet_ntoa(m_clientaddr.sin_addr),htons(m_clientaddr.sin_port));
+            NSLog(@"UDP - RECV:::::IPADDR: %s Port: %d",inet_ntoa(m_clientaddr.sin_addr),htons(m_clientaddr.sin_port));
             
             // 回调
             self.returnDataBlock(true);
