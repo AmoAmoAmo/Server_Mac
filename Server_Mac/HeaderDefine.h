@@ -26,8 +26,8 @@ static INT16        LIGHT_TYPE          = 2  ; // 电灯
 static INT16        AIRCONDITION_TYPE   = 3  ; // 空调
 static INT16        SOCKET_TYPE         = 4  ; // 插座
 
-// 假设已添加摄像头ID为12345
-static INT16        CAMERA_ID = 12345;
+// 假设已添加Mac摄像头ID为12346
+static INT16        CAMERA_ID = 12355;
 
 
 #endif /* HeaderDefine_h */

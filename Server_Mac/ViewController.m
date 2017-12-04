@@ -380,6 +380,7 @@ void didCompressH264(void *outputCallbackRefCon,
 
 // 点击 reset 时
 - (IBAction)startUDPSearch:(NSButton *)sender {
+    printf("-- reset ---\n");
     
 //    [self stopCapture];
     
